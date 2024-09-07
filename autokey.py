@@ -26,7 +26,7 @@ class AutoKey:
                     {"activate_command": "Google Chrome", "window": "", "delay": 3}
                 ],
                 "nnn": [
-                    {"iterm_command": "echo 'My command'", "window": "John's window"}
+                    {"iterm_command": "echo 'My command'", "window": "Main Window"}
                 ],
                 "f12": [
                     {"iterm_command": "ls -lat", "window": "File List"}
@@ -113,6 +113,8 @@ class AutoKey:
                 self.activate_application(command['activate_command'], command.get('window', ''))
             elif 'iterm_command' in command:
                 self.execute_iterm_command(command['iterm_command'], command.get('window', ''))
+            elif 'url' in command:
+                self.find_or_create_chrome_tab(command['url'])
 
             delay = command.get('delay', 0)
             time.sleep(delay)
@@ -194,6 +196,51 @@ class AutoKey:
             return f"iTerm: {command['iterm_command'][:30]}..."  # Truncate long commands
         return "Unknown command"
 
+    def find_or_create_chrome_tab(self, url_substring):
+        applescript = f'''
+           on run argv
+               set urlSubstring to item 1 of argv
+
+               tell application "Google Chrome"
+                   activate
+
+                   set found to false
+                   set windowIndex to 1
+                   repeat with w in windows
+                       set tabIndex to 1
+                       repeat with t in tabs of w
+                           if urlSubstring is in (URL of t as string) then
+                               set found to true
+                               set active tab index of w to tabIndex
+                               set index of w to 1
+                               return "Tab found and activated."
+                           end if
+                           set tabIndex to tabIndex + 1
+                       end repeat
+                       set windowIndex to windowIndex + 1
+                   end repeat
+
+                   if not found then
+                       tell front window
+                           make new tab with properties {{URL:"http://" & urlSubstring}}
+                       end tell
+                       return "New tab created with URL: http://" & urlSubstring
+                   end if
+               end tell
+           end run
+           '''
+
+        try:
+            result = subprocess.run(
+                ["osascript", "-e", applescript, url_substring],
+                capture_output=True,
+                text=True,
+                check=True
+            )
+            print(result.stdout.strip())
+        except subprocess.CalledProcessError as e:
+            print(f"Error: {e}")
+            print(f"Script output: {e.stdout}")
     def run(self):
         self.print_cheat_sheet()
         with keyboard.Listener(on_press=self.on_press, on_release=self.on_release) as listener:
