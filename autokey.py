@@ -1,12 +1,14 @@
 import os
 import plistlib
-import sys
 import json
 import time
 import argparse
 import subprocess
 from pathlib import Path
+import shlex as shlex_module
 from pynput import keyboard
+import csv
+from datetime import datetime
 
 
 class AutoKey:
@@ -16,28 +18,67 @@ class AutoKey:
         self.config = self.load_config()
         self.current_keys = set()
         self.last_three_keys = []
+        self.last_execution_time = 0
+        self.cooldown_period = 5.0  # 5 second cooldown
         self.keyboard_controller = keyboard.Controller()
-        self.dock_apps = self.get_dock_apps()
+        self.dock_apps = []
+        self.triplet_history_path = self.script_dir / 'data' / 'triplet_history.csv'
+
+    def migrate_config(self, config):
+        """Migrate old config format to new format with descriptions and commands."""
+        migrated_config = {}
+
+        for key, value in config.items():
+            # Check if it's already in the new format
+            if isinstance(value, dict) and "commands" in value:
+                migrated_config[key] = value
+                continue
+
+            # If it's in the old format (array of commands)
+            if isinstance(value, list):
+                # Create new structure with empty description
+                migrated_config[key] = {
+                    "description": "No description provided",
+                    "commands": value
+                }
+
+        return migrated_config
 
     def load_config(self):
         if not self.config_path.exists() or self.config_path.stat().st_size == 0:
             default_config = {
-                "aaa": [
-                    {"activate_command": "Google Chrome", "window": "", "delay": 3}
-                ],
-                "nnn": [
-                    {"iterm_command": "echo 'My command'", "window": "Main Window"}
-                ],
-                "f12": [
-                    {"iterm_command": "ls -lat", "window": "File List"}
-                ]
+                "aaa": {
+                    "description": "Open Google Chrome",
+                    "commands": [
+                        {"activate_command": "Google Chrome", "window": "", "delay": 3}
+                    ]
+                },
+                "py1": {
+                    "description": "Run test script",
+                    "commands": [
+                        {
+                            "python_command": "/Users/user/venv/bin/python /path/to/script.py -n 5"
+                        }
+                    ]
+                }
             }
             with open(self.config_path, 'w') as f:
                 json.dump(default_config, f, indent=2)
             return default_config
 
         with open(self.config_path, 'r') as f:
-            return json.load(f)
+            config = json.load(f)
+
+        # Migrate the config if needed
+        migrated_config = self.migrate_config(config)
+
+        # If the config was migrated (different from original), save it back
+        if migrated_config != config:
+            print("Migrating config to new format...")
+            with open(self.config_path, 'w') as f:
+                json.dump(migrated_config, f, indent=2)
+
+        return migrated_config
 
     def get_dock_apps(self):
         dock_plist_path = os.path.expanduser("~/Library/Preferences/com.apple.dock.plist")
@@ -69,24 +110,30 @@ class AutoKey:
     def on_press(self, key):
         if isinstance(key, keyboard.KeyCode):
             char = key.char
-            self.last_three_keys.append(char)
-            if len(self.last_three_keys) > 3:
-                self.last_three_keys.pop(0)
+            if char is not None:  # Only add non-None characters
+                self.last_three_keys.append(char)
+                if len(self.last_three_keys) > 3:
+                    self.last_three_keys.pop(0)
 
-            if len(set(self.last_three_keys)) == 1 and len(self.last_three_keys) == 3:
-                triplet = ''.join(self.last_three_keys)
-                if triplet in self.config:
-                    self.undo_triplet()
-                    self.execute_commands(self.config[triplet])
+                if len(self.last_three_keys) == 3:
+                    pattern = ''.join(self.last_three_keys)
+                    if pattern in self.config:
+                        self.undo_triplet()
+                        self.execute_commands(self.config[pattern])
+                        self.update_triplet_history(pattern)
         elif isinstance(key, keyboard.Key):
             # Handle function keys
             if key.name.startswith('f') and key.name[1:].isdigit():
                 f_num = int(key.name[1:])
                 if key.name in self.config:
                     self.execute_commands(self.config[key.name])
+                    print("\nCommand executed. Refreshing cheatsheet...")
+                    self.print_cheat_sheet()
                 elif f_num <= len(self.dock_apps):
                     app_name = self.dock_apps[f_num - 1]
                     self.activate_application(app_name)
+                    print("\nDock app activated. Refreshing cheatsheet...")
+                    self.print_cheat_sheet()
 
         self.current_keys.add(key)
 
@@ -98,6 +145,8 @@ class AutoKey:
                     command_key = f"cmd+{num}"
                     if command_key in self.config:
                         self.execute_commands(self.config[command_key])
+                        print("\nCommand executed. Refreshing cheatsheet...")
+                        self.print_cheat_sheet()
 
     def on_release(self, key):
         self.current_keys.discard(key)
@@ -107,7 +156,89 @@ class AutoKey:
             self.keyboard_controller.press('z')
             self.keyboard_controller.release('z')
 
-    def execute_commands(self, commands):
+    def execute_python_command(self, command_string):
+        """
+        Execute a Python script using a specific Python interpreter with arguments.
+        """
+        try:
+            args = shlex_module.split(command_string)
+
+            if len(args) < 2:
+                print(f"Warning: Invalid Python command format: {command_string}")
+                print("Expected format: /path/to/python /path/to/script.py [args...]")
+                return
+
+            python_interpreter = args[0]
+            script_path = args[1]
+            script_args = args[2:] if len(args) > 2 else []
+
+            if not Path(python_interpreter).exists():
+                print(f"Warning: Python interpreter not found: {python_interpreter}")
+                return
+
+            if not Path(script_path).exists():
+                print(f"Warning: Python script not found: {script_path}")
+                return
+
+            env = os.environ.copy()
+            script_dir = str(Path(script_path).parent)
+
+            if 'PYTHONPATH' in env:
+                env['PYTHONPATH'] = f"{script_dir}:{env['PYTHONPATH']}"
+            else:
+                env['PYTHONPATH'] = script_dir
+
+            process = subprocess.Popen(
+                [python_interpreter, script_path] + script_args,
+                env=env,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                bufsize=1,
+                universal_newlines=True
+            )
+
+            def handle_output():
+                while True:
+                    output = process.stdout.readline()
+                    if output:
+                        print(output.strip())
+                    if process.poll() is not None:
+                        break
+
+                stdout, stderr = process.communicate()
+                if stdout:
+                    print(stdout.strip())
+                if stderr:
+                    print(f"Errors: {stderr.strip()}")
+
+                # Reprint cheatsheet after command execution
+                print("\nPython command completed. Refreshing cheatsheet...")
+                self.print_cheat_sheet()
+
+            import threading
+            output_thread = threading.Thread(target=handle_output, daemon=True)
+            output_thread.start()
+
+            print(f"Started Python command: {command_string}")
+
+        except Exception as e:
+            print(f"Error executing Python command: {e}")
+            self.print_cheat_sheet()
+
+    def execute_commands(self, command_config):
+        current_time = time.time()
+        if current_time - self.last_execution_time < self.cooldown_period:
+            return
+
+        self.last_execution_time = current_time
+        # If it's the old format (direct list of commands)
+        if isinstance(command_config, list):
+            commands = command_config
+        # If it's the new format (dict with commands key)
+        else:
+            commands = command_config["commands"]
+
         for command in commands:
             if 'activate_command' in command:
                 self.activate_application(command['activate_command'], command.get('window', ''))
@@ -115,9 +246,26 @@ class AutoKey:
                 self.execute_iterm_command(command['iterm_command'], command.get('window', ''))
             elif 'url' in command:
                 self.find_or_create_chrome_tab(command['url'])
+            elif 'python_command' in command:
+                self.execute_python_command(command['python_command'])
 
             delay = command.get('delay', 0)
             time.sleep(delay)
+
+    def get_command_description(self, key, command_config):
+        # If it's the old format (direct list of commands)
+        if isinstance(command_config, list):
+            command = command_config[0]
+            if 'activate_command' in command:
+                return f"Activate {command['activate_command']}"
+            elif 'iterm_command' in command:
+                return f"iTerm: {command['iterm_command'][:30]}..."
+            elif 'python_command' in command:
+                return f"Python: {command['python_command']}"
+            return "Unknown command"
+
+        # If it's the new format with description
+        return command_config.get("description", "No description provided")
 
     def activate_application(self, app_name, window=''):
         script = f'''
@@ -146,14 +294,7 @@ class AutoKey:
                     write text "{command}"
                 end tell
             end tell
-            tell application "System Events"
-                tell process "iTerm2"
-                    click menu item "Edit Window Title" of menu "Window" of menu bar 1
-                    delay 0.5
-                    keystroke "{window_title}"
-                    key code 36 -- Press Return
-                end tell
-            end tell
+
         end tell
         '''
         subprocess.run(["osascript", "-e", apple_script])
@@ -167,18 +308,26 @@ class AutoKey:
         # Print triplet commands
         print("\nTriplet Commands:")
         print("-" * 60)
-        for triplet, commands in self.config.items():
-            if len(triplet) == 3:
-                command_desc = self.get_command_description(commands[0])
-                print(f"{triplet:<10} {command_desc}")
+        for key, commands in self.config.items():
+            if len(key) == 3:
+                desc = self.get_command_description(key, commands)
+                print(f"{key:<10} {desc}")
 
         # Print function key commands
         print("\nFunction Key Commands:")
         print("-" * 60)
         for key, commands in self.config.items():
             if key.startswith('f') and key[1:].isdigit():
-                command_desc = self.get_command_description(commands[0])
-                print(f"{key.upper():<10} {command_desc}")
+                desc = self.get_command_description(key, commands)
+                print(f"{key.upper():<10} {desc}")
+
+        # Print Command + number shortcuts
+        print("\nCommand + Number Shortcuts:")
+        print("-" * 60)
+        for key, commands in self.config.items():
+            if key.startswith('cmd+'):
+                desc = self.get_command_description(key, commands)
+                print(f"{key:<10} {desc}")
 
         # Print dock commands
         print("\nDock Commands (Function Keys):")
@@ -189,58 +338,57 @@ class AutoKey:
 
         print("\n" + "=" * 60)
 
-    def get_command_description(self, command):
-        if 'activate_command' in command:
-            return f"Activate {command['activate_command']}"
-        elif 'iterm_command' in command:
-            return f"iTerm: {command['iterm_command'][:30]}..."  # Truncate long commands
-        return "Unknown command"
-
-    def find_or_create_chrome_tab(self, url_substring):
-        applescript = f'''
-           on run argv
-               set urlSubstring to item 1 of argv
-
-               tell application "Google Chrome"
-                   activate
-
-                   set found to false
-                   set windowIndex to 1
-                   repeat with w in windows
-                       set tabIndex to 1
-                       repeat with t in tabs of w
-                           if urlSubstring is in (URL of t as string) then
-                               set found to true
-                               set active tab index of w to tabIndex
-                               set index of w to 1
-                               return "Tab found and activated."
-                           end if
-                           set tabIndex to tabIndex + 1
-                       end repeat
-                       set windowIndex to windowIndex + 1
-                   end repeat
-
-                   if not found then
-                       tell front window
-                           make new tab with properties {{URL:"http://" & urlSubstring}}
-                       end tell
-                       return "New tab created with URL: http://" & urlSubstring
-                   end if
-               end tell
-           end run
-           '''
+    def find_or_create_chrome_tab(self, url):
+        """Open a URL in the default web browser (replacing the Chrome-specific function)."""
+        # Ensure URL has http:// or https:// prefix
+        if not url.startswith(('http://', 'https://')):
+            url = 'https://' + url
 
         try:
-            result = subprocess.run(
-                ["osascript", "-e", applescript, url_substring],
-                capture_output=True,
-                text=True,
-                check=True
-            )
-            print(result.stdout.strip())
+            # Using subprocess.run with the 'open' command (macOS specific)
+            subprocess.run(['open', url], check=True)
+            print(f"Opened URL in default browser: {url}")
         except subprocess.CalledProcessError as e:
-            print(f"Error: {e}")
-            print(f"Script output: {e.stdout}")
+            print(f"Error opening URL: {e}")
+
+    def update_triplet_history(self, triplet_key):
+        # Ensure data directory exists
+        self.triplet_history_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Read existing history
+        history = {}
+        if self.triplet_history_path.exists():
+            with open(self.triplet_history_path, 'r', newline='', encoding='utf-8') as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    history[row['key']] = row
+
+        now = datetime.now().isoformat(timespec='seconds')
+        desc = self.get_command_description(triplet_key, self.config[triplet_key])
+        if triplet_key in history:
+            row = history[triplet_key]
+            row['count'] = str(int(row['count']) + 1)
+            row['last used'] = now
+            row['description'] = desc
+        else:
+            row = {
+                'key': triplet_key,
+                'count': '1',
+                'last used': now,
+                'description': desc
+            }
+            history[triplet_key] = row
+
+        # Sort by count descending, then by last used descending
+        sorted_rows = sorted(history.values(), key=lambda r: (-int(r['count']), r['last used']), reverse=False)
+
+        # Write back to CSV
+        with open(self.triplet_history_path, 'w', newline='', encoding='utf-8') as f:
+            writer = csv.DictWriter(f, fieldnames=['key', 'count', 'last used', 'description'])
+            writer.writeheader()
+            for row in sorted_rows:
+                writer.writerow(row)
+
     def run(self):
         self.print_cheat_sheet()
         with keyboard.Listener(on_press=self.on_press, on_release=self.on_release) as listener:
@@ -253,6 +401,7 @@ def main():
     args = parser.parse_args()
 
     auto_key = AutoKey(args.config)
+    auto_key.dock_apps = auto_key.get_dock_apps()
     auto_key.run()
 
 
