@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-open_chrome_tab.py --url cnn.com --tag news         # tracks cnn.com under "news"
-open_chrome_tab.py --url wsj.com --tag news --fresh # closes all "news" tabs, opens wsj
+open_chrome_tab.py --url cnn.com --tag news   # closes existing "news" tabs, opens cnn
+open_chrome_tab.py --url wsj.com --tag news   # closes existing "news" tabs, opens wsj
 """
 
 import argparse
@@ -31,7 +31,6 @@ def applescript(script):
 
 
 def close_tabs_matching(domains):
-    """Close any tab whose URL contains any of the domains."""
     for domain in domains:
         applescript(f'''
         tell application "{BROWSER}"
@@ -49,7 +48,6 @@ def close_tabs_matching(domains):
 
 
 def open_tab(url):
-    """Open tab and return the actual URL it lands on."""
     result = applescript(f'''
     tell application "{BROWSER}"
         activate
@@ -73,27 +71,23 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument("--url", "-u", required=True)
     p.add_argument("--tag", "-t")
-    p.add_argument("--fresh", "-f", action="store_true")
     args = p.parse_args()
 
     url = args.url if args.url.startswith("http") else "https://" + args.url
-    domain = get_domain(args.url)
 
-    tags = load_tags() if args.tag else {}
+    tags = load_tags()
 
-    if args.tag and args.fresh and args.tag in tags:
+    # Close existing tabs with this tag
+    if args.tag and args.tag in tags:
         close_tabs_matching(tags[args.tag])
-        tags[args.tag] = []
 
     actual_url = open_tab(url)
-    actual_domain = get_domain(actual_url) if actual_url else domain
+    actual_domain = get_domain(actual_url) if actual_url else get_domain(args.url)
     print(f"Opened: {actual_url or url}")
 
+    # Track under tag
     if args.tag:
-        if args.tag not in tags:
-            tags[args.tag] = []
-        if actual_domain not in tags[args.tag]:
-            tags[args.tag].append(actual_domain)
+        tags[args.tag] = [actual_domain]
         save_tags(tags)
 
 
