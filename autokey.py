@@ -19,7 +19,7 @@ class AutoKey:
         self.current_keys = set()
         self.last_three_keys = []
         self.last_execution_time = 0
-        self.cooldown_period = 5.0  # 5 second cooldown
+        self.cooldown_period = 1.0  # 1 second cooldown to prevent accidental double-execution when typing naturally
         self.keyboard_controller = keyboard.Controller()
         self.dock_apps = []
         self.triplet_history_path = self.script_dir / 'data' / 'triplet_history.csv'
@@ -116,10 +116,11 @@ class AutoKey:
                     self.last_three_keys.pop(0)
 
                 if len(self.last_three_keys) == 3:
-                    pattern = ''.join(self.last_three_keys)
+                    pattern = ''.join(self.last_three_keys).lower()
                     if pattern in self.config:
                         self.undo_triplet()
                         self.execute_commands(self.config[pattern])
+                        self.log_command(pattern, self.config[pattern])
                         self.update_triplet_history(pattern)
         elif isinstance(key, keyboard.Key):
             # Handle function keys
@@ -127,13 +128,11 @@ class AutoKey:
                 f_num = int(key.name[1:])
                 if key.name in self.config:
                     self.execute_commands(self.config[key.name])
-                    print("\nCommand executed. Refreshing cheatsheet...")
-                    self.print_cheat_sheet()
+                    self.log_command(key.name, self.config[key.name])
                 elif f_num <= len(self.dock_apps):
                     app_name = self.dock_apps[f_num - 1]
                     self.activate_application(app_name)
-                    print("\nDock app activated. Refreshing cheatsheet...")
-                    self.print_cheat_sheet()
+                    print(f"✓ {key.name:<12} Activate {app_name}")
 
         self.current_keys.add(key)
 
@@ -145,11 +144,15 @@ class AutoKey:
                     command_key = f"cmd+{num}"
                     if command_key in self.config:
                         self.execute_commands(self.config[command_key])
-                        print("\nCommand executed. Refreshing cheatsheet...")
-                        self.print_cheat_sheet()
+                        self.log_command(command_key, self.config[command_key])
 
     def on_release(self, key):
         self.current_keys.discard(key)
+
+    def log_command(self, key, command_config):
+        """Log command execution in a single neat line"""
+        desc = self.get_command_description(key, command_config)
+        print(f"✓ {key:<12} {desc}")
 
     def undo_triplet(self):
         with self.keyboard_controller.pressed(keyboard.Key.cmd):
@@ -212,19 +215,12 @@ class AutoKey:
                 if stderr:
                     print(f"Errors: {stderr.strip()}")
 
-                # Reprint cheatsheet after command execution
-                print("\nPython command completed. Refreshing cheatsheet...")
-                self.print_cheat_sheet()
-
             import threading
             output_thread = threading.Thread(target=handle_output, daemon=True)
             output_thread.start()
 
-            print(f"Started Python command: {command_string}")
-
         except Exception as e:
             print(f"Error executing Python command: {e}")
-            self.print_cheat_sheet()
 
     def execute_commands(self, command_config):
         current_time = time.time()
@@ -347,7 +343,6 @@ class AutoKey:
         try:
             # Using subprocess.run with the 'open' command (macOS specific)
             subprocess.run(['open', url], check=True)
-            print(f"Opened URL in default browser: {url}")
         except subprocess.CalledProcessError as e:
             print(f"Error opening URL: {e}")
 

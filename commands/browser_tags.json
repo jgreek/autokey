@@ -1,0 +1,19 @@
+{
+  "news": [
+    "cnn.com",
+    "bbc.com",
+    "nytimes.com",
+    "theguardian.com",
+    "wsj.com"
+  ],
+  "sports": [
+    "espn.com",
+    "nfl.com",
+    "nba.com"
+  ],
+  "work": [
+    "github.com",
+    "slack.com",
+    "gmail.com"
+  ]
+}
