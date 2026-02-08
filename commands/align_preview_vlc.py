@@ -46,7 +46,33 @@ def switch_to_app(app_name: str) -> None:
     apple_script = f'tell application "{app_name}" to activate'
     subprocess.run(['osascript', '-e', apple_script])
     # Small delay to ensure app switch completes
-    time.sleep(0.5)
+    #time.sleep(0.5)
+
+
+def check_window_count(app_name: str, min_windows: int = 2) -> bool:
+    """
+    Check if an application has at least the specified number of windows open.
+
+    Args:
+        app_name: Name of the application to check
+        min_windows: Minimum number of windows required (default: 2)
+
+    Returns:
+        True if app has at least min_windows open, False otherwise
+    """
+    apple_script = f'''
+    tell application "{app_name}"
+        return count of windows
+    end tell
+    '''
+
+    try:
+        result = subprocess.run(['osascript', '-e', apple_script],
+                              capture_output=True, text=True, check=True)
+        window_count = int(result.stdout.strip())
+        return window_count >= min_windows
+    except (subprocess.CalledProcessError, ValueError):
+        return False
 
 
 def send_keyboard_shortcut(cmd: bool = False, opt: bool = False,
@@ -84,13 +110,23 @@ def run_preview_vlc_sequence() -> None:
     """Execute the specific Preview and VLC shortcut sequence."""
     # Switch to VLC and send shortcut
     # time.sleep(1)
+
     send_keyboard_shortcut(cmd=True, opt=True, key='h')
 
     switch_to_app("Preview")
+
+    # Only close window if there are at least 2 windows open
+    # # Theory: if you're opening a new window, you're done with the last
+    # https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcT5AfaldK063pLCGbqW76ZBO0OYmcxaIRtRfw&ssend_keyboard_shortcut(cmd=True, opt=False, key='`')
+
+    # if check_window_count("Preview", min_windows=2):
+    #     send_keyboard_shortcut(cmd=True, opt=False, key='w')
+    #     time.sleep(0.3)  # Give extra time for window close to complete
+
     send_keyboard_shortcut(cmd=True, opt=True, key='1')
     send_keyboard_shortcut(cmd=True, opt=True, key='e')
+    send_keyboard_shortcut(cmd=True, opt=True, key='w')
 
-    time.sleep(1)
     switch_to_app("VLC")
     send_keyboard_shortcut(cmd=True, opt=True, key='r')
 

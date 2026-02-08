@@ -4,11 +4,13 @@ AutoKey is a Python-based tool that enhances your productivity by allowing you t
 
 ## Features
 
-- Custom triplet key commands (e.g., 'aaa', 'nnn')
+- Custom 3-key sequence commands (e.g., 'aaa', 'qqw', 'xx2', 'nyp')
 - Function key shortcuts (F1-F12)
+- Command + number shortcuts (Cmd+1, Cmd+2, etc.)
 - Integration with Dock apps
 - iTerm2 command execution
-- Chrome tab management
+- Python script execution with real-time output
+- URL opening in default browser
 - Cheat sheet display for easy reference
 
 ## Requirements
