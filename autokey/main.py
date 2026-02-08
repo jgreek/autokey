@@ -1,6 +1,7 @@
 """Main AutoKey orchestrator."""
 
 import argparse
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
@@ -48,6 +49,8 @@ class AutoKey:
             if self.executor.execute(self.config[pattern]):
                 description = self.display.get_description(pattern, self.config[pattern])
                 self.history_tracker.update(pattern, description)
+                timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                print(f"[{timestamp}] {pattern} {description}")
 
     def _handle_function_key(self, key_name: str) -> None:
         """Handle a function key press."""

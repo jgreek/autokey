@@ -30,4 +30,3 @@ def activate_app(app_name: str, window: str = '') -> None:
     '''
 
     subprocess.run(['osascript', '-e', script])
-    print(f"Activated {app_name} {window}")

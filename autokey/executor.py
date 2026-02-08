@@ -96,22 +96,16 @@ class CommandExecutor:
 
             def handle_output():
                 while True:
-                    output = process.stdout.readline()
-                    if output:
-                        print(output.strip())
+                    process.stdout.readline()
                     if process.poll() is not None:
                         break
 
                 stdout, stderr = process.communicate()
-                if stdout:
-                    print(stdout.strip())
                 if stderr:
-                    print(f"Errors: {stderr.strip()}")
+                    print(f"Error: {stderr.strip()}")
 
             output_thread = threading.Thread(target=handle_output, daemon=True)
             output_thread.start()
-
-            print(f"Started Python command: {command_string}")
 
         except Exception as e:
             print(f"Error executing Python command: {e}")
@@ -135,7 +129,6 @@ class CommandExecutor:
         end tell
         '''
         subprocess.run(["osascript", "-e", apple_script])
-        print(f"Executed iTerm command: {command} in window: {window_title}")
 
     def open_url(self, url: str, browser: Optional[str] = None) -> None:
         """Open a URL in the specified browser or default browser."""
@@ -145,9 +138,7 @@ class CommandExecutor:
         try:
             if browser:
                 subprocess.run(['open', '-a', browser, url], check=True)
-                print(f"Opened URL in {browser}: {url}")
             else:
                 subprocess.run(['open', url], check=True)
-                print(f"Opened URL in default browser: {url}")
         except subprocess.CalledProcessError as e:
             print(f"Error opening URL: {e}")
