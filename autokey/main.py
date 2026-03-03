@@ -1,6 +1,8 @@
 """Main AutoKey orchestrator."""
 
 import argparse
+import threading
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -69,9 +71,26 @@ class AutoKey:
             print("\nCommand executed. Refreshing cheatsheet...")
             self.display.print_cheat_sheet()
 
+    def _watch_config(self) -> None:
+        """Reload config when config.json is modified."""
+        last_mtime = self.config_path.stat().st_mtime
+        while True:
+            time.sleep(1)
+            try:
+                mtime = self.config_path.stat().st_mtime
+                if mtime != last_mtime:
+                    last_mtime = mtime
+                    self.config = self.config_manager.load()
+                    self.display.config = self.config
+                    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                    print(f"[{timestamp}] config reloaded ({len(self.config)} shortcuts)")
+            except Exception as e:
+                print(f"Config watch error: {e}")
+
     def run(self) -> None:
         """Start the AutoKey listener."""
         self.display.print_cheat_sheet()
+        threading.Thread(target=self._watch_config, daemon=True).start()
         self.listener.start()
 
 

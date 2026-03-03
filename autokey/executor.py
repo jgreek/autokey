@@ -14,7 +14,7 @@ from .applescript import activate_app
 class CommandExecutor:
     """Dispatches and executes AutoKey commands."""
 
-    def __init__(self, cooldown: float = 5.0, on_error: Optional[Callable] = None):
+    def __init__(self, cooldown: float = 0.5, on_error: Optional[Callable] = None):
         self.cooldown = cooldown
         self.last_execution_time = 0
         self.on_error = on_error

@@ -1,7 +1,10 @@
 """Keyboard listener for AutoKey."""
 
+import threading
 from typing import Callable, Optional, Set, List
 from pynput import keyboard
+
+TRIPLET_TIMEOUT = 5.0
 
 
 class KeyboardListener:
@@ -21,6 +24,14 @@ class KeyboardListener:
         self.last_three_keys: List[str] = []
         self.keyboard_controller = keyboard.Controller()
         self._listener: Optional[keyboard.Listener] = None
+        self._reset_timer: Optional[threading.Timer] = None
+
+    def _schedule_reset(self) -> None:
+        if self._reset_timer:
+            self._reset_timer.cancel()
+        self._reset_timer = threading.Timer(TRIPLET_TIMEOUT, self.last_three_keys.clear)
+        self._reset_timer.daemon = True
+        self._reset_timer.start()
 
     def start(self) -> None:
         """Start listening for keyboard events (blocking)."""
@@ -51,8 +62,11 @@ class KeyboardListener:
                 if len(self.last_three_keys) > 3:
                     self.last_three_keys.pop(0)
 
+                self._schedule_reset()
+
                 if len(self.last_three_keys) == 3:
                     pattern = ''.join(self.last_three_keys)
+                    self.last_three_keys.clear()
                     self.on_triplet(pattern)
 
         elif isinstance(key, keyboard.Key):
