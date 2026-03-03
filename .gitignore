@@ -164,3 +164,4 @@ cython_debug/
 .idea/
 data/triplet_history.csv
 data/cheat_sheet.html
+speech.mp3
