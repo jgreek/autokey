@@ -1,0 +1,60 @@
+{
+  "_comment": "Copy this file to config.json and adjust paths to match your setup.",
+
+  "drr": {
+    "description": "Drive: search investment docs",
+    "commands": [
+      {
+        "iterm_command": "python3 ~/autokey/commands/drive_navigator.py --root ~/GoogleDrive/Investments --search"
+      }
+    ]
+  },
+  "dri": {
+    "description": "Drive: rebuild document index",
+    "commands": [
+      {
+        "iterm_command": "python3 ~/autokey/commands/drive_navigator.py --root ~/GoogleDrive/Investments --rebuild-index && echo 'Index rebuilt.'"
+      }
+    ]
+  },
+  "drx": {
+    "description": "Drive: open recently accessed doc",
+    "commands": [
+      {
+        "iterm_command": "python3 ~/autokey/commands/drive_navigator.py --root ~/GoogleDrive/Investments --open-recent"
+      }
+    ]
+  },
+  "drf": {
+    "description": "Drive: browse financials",
+    "commands": [
+      {
+        "iterm_command": "python3 ~/autokey/commands/drive_navigator.py --root ~/GoogleDrive/Investments --category Financials"
+      }
+    ]
+  },
+  "drd": {
+    "description": "Drive: browse due-diligence docs",
+    "commands": [
+      {
+        "iterm_command": "python3 ~/autokey/commands/drive_navigator.py --root ~/GoogleDrive/Investments --category 'Due Diligence'"
+      }
+    ]
+  },
+  "drm": {
+    "description": "Drive: browse board memos",
+    "commands": [
+      {
+        "iterm_command": "python3 ~/autokey/commands/drive_navigator.py --root ~/GoogleDrive/Investments --category Memo"
+      }
+    ]
+  },
+  "dry": {
+    "description": "Drive: browse docs from current year",
+    "commands": [
+      {
+        "iterm_command": "python3 ~/autokey/commands/drive_navigator.py --root ~/GoogleDrive/Investments --year 2026"
+      }
+    ]
+  }
+}
